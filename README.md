@@ -1,84 +1,100 @@
-# CGV - Collaborative Game Visualization
+# CGV - Capture-the-Flag Raycasting Game
 
-A multiplayer networked physics simulation where up to 4 players collaboratively interact with physics-based balls in real-time.
+This project is a C/OpenGL multiplayer raycasting FPS prototype. Players move through a maze, see each other as sprites, and compete in a simple capture-the-flag mode where the flag can be stolen by getting close to the current holder.
 
-## Features
+## What it does
 
-- **Multiplayer Networking**: Peer-to-peer client communication via central server
-- **Real-time Physics**: Ball simulation with velocity, acceleration, and drag
-- **3D Graphics**: OpenGL/GLUT rendering
-- **Interactive**: Mouse-based ball manipulation (drag and throw)
-- **Synchronized State**: Server coordinates player connections
+- Starts a matchmaking server and connects up to 4 players.
+- Renders a first-person raycasted view of a maze.
+- Draws other players as billboard sprites.
+- Tracks a flag holder, steal cooldown, and hold-time ranking.
+- Shows a minimap and in-game HUD overlays.
+- Supports custom PPM textures for player sprites.
 
 ## Build
 
 ### Requirements
 - GCC or Clang
-- OpenGL development libraries
-- GLUT development libraries
-- POSIX-compliant system (Linux/macOS)
+- OpenGL / GLUT development libraries
+- POSIX-compatible system (Linux/macOS)
 
-### Ubuntu/Debian
+### Ubuntu / Debian
 ```bash
 sudo apt-get install build-essential libgl1-mesa-dev libglu1-mesa-dev freeglut3-dev
 ```
 
-### Build Commands
+### Build commands
 ```bash
-make          # Build both server and client
-make clean    # Remove build artifacts
+make       # Build server and client
+make clean # Remove build artifacts
+make debug # Debug build with symbols and verbose logging
 ```
 
-## Running
+## Run
 
-### Local 4-Player Test
+### Local test
 ```bash
 make run-localhost
 ```
-Starts server and 4 clients connecting to localhost.
+Starts the server and local clients on `localhost`.
 
-### Manual Server
+### Server only
 ```bash
 make run-server
 ```
-Starts server on port 5000.
 
-### Manual Client
+### Client only
 ```bash
 ./build/client_app <server_ip>
 ```
-Connect a client to server at `<server_ip>`.
 
-## Project Structure
+## Controls
+
+- `WASD`: Move
+- Arrow keys: Turn
+- `ESC`: Exit
+
+## Current game features
+
+- Maze-based raycasting renderer
+- Multi-player network synchronization
+- Capture-the-flag gameplay
+- Flag holder highlight on sprite and minimap
+- Ranking by total time holding the flag
+- Custom player textures from `textures/`
+
+## Project structure
 
 ```
 ├── server/           # Matchmaking server
 ├── client/
-│   ├── core/         # Game state & logic
-│   ├── networking/   # Client network layer
-│   ├── physics/      # Physics calculations
-│   ├── simulation/   # Ball management
-│   ├── render/       # OpenGL rendering
-│   ├── input/        # Input handling
-│   └── util/         # Utilities
-├── common/           # Shared protocol
-└── build/            # Compiled binaries
+│   ├── core/         # Game state and per-frame update
+│   ├── networking/   # Socket connection and receive thread
+│   ├── render/       # Raycaster, sprites, textures, HUD
+│   ├── simulation/   # Level/map generation
+│   ├── input/        # Keyboard input
+│   └── util/         # Helpers
+├── common/           # Shared protocol and logging
+├── textures/         # Player sprite textures
+└── build/            # Output binaries
 ```
 
-## Game Controls
+## Notes on custom textures
 
-- **Left Mouse**: Click and drag balls to move them
-- **Ctrl+C**: Exit client
+- Player textures are loaded from PPM files in `textures/`.
+- You can replace the files used in [client/core/game.c](client/core/game.c) with your own PPM sprites.
+- The texture loader currently expects PPM input, not PNG/JPG.
 
-## Architecture
+## How the architecture works
 
-- **Server**: Accepts 4 clients, provides peer addresses for mesh connectivity
-- **Clients**: Connect to server, then establish peer connections with other clients
-- **Communication**: TCP sockets for reliability
-- **Simulation**: Each ball owned by one player; transfers between players as balls move between regions
+- The server assigns player IDs and shares peer connection info.
+- Clients connect to the server, then establish direct peer sockets.
+- The main loop updates movement and broadcast state.
+- A receive thread applies remote player updates.
+- The renderer raycasts against the map grid and draws walls/sprites/HUD.
 
-## Performance
+## Troubleshooting
 
-- Compiled with `-O2` optimization
-- Physics updates at ~60 FPS (configurable via `DT` in config.h)
-- Multithreaded networking (receive thread per client)
+- If a texture is not showing, confirm the file exists in `textures/` and is valid PPM.
+- If the game does not start, make sure the build finished successfully and the required graphics libraries are installed.
+- If port `5000` is busy, stop the existing server process and try again.
