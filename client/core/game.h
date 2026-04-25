@@ -18,6 +18,7 @@ typedef struct {
     JoinResponse join_info;
     int connected_players[MAX_PLAYERS];
     int ready_players[MAX_PLAYERS];
+    int selected_character[MAX_PLAYERS];
     int game_started;
 
     /* FPS mode */
@@ -48,6 +49,11 @@ void game_set_game_started(int started);
 int game_has_started(void);
 int game_toggle_local_ready(void);
 int game_get_local_ready(void);
+void game_set_player_character(int player_id, int character_index);
+int game_get_player_character(int player_id);
+int game_cycle_local_character(int direction);
+int game_get_character_count(void);
+const char *game_get_character_name(int character_index);
 
 int game_get_flag_holder(void);
 float game_get_flag_hold_time(int player_id);

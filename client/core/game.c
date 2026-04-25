@@ -15,8 +15,37 @@
 
 #define FLAG_STEAL_DISTANCE 1.2f
 #define FLAG_STEAL_COOLDOWN_SEC 0.8f
+#define CHARACTER_COUNT 6
 
 GameState g_game;
+
+static const char *g_character_names[CHARACTER_COUNT] = {
+    "LORD",
+    "OHYEA",
+    "BLUE NINJA",
+    "YELLOW NINJA",
+    "RED NINJA",
+    "GREEN NINJA"
+};
+
+static const char *g_character_textures[CHARACTER_COUNT] = {
+    "textures/lord.ppm",
+    "textures/ohyea.ppm",
+    "textures/player_blue.ppm",
+    "textures/player_yellow.ppm",
+    "textures/player_red.ppm",
+    "textures/player_green.ppm"
+};
+
+static int normalize_character_index(int idx) {
+    if (CHARACTER_COUNT <= 0) {
+        return 0;
+    }
+    while (idx < 0) {
+        idx += CHARACTER_COUNT;
+    }
+    return idx % CHARACTER_COUNT;
+}
 
 void game_init(int local_player_id, const JoinResponse *join_info) {
     g_game.local_player_id = local_player_id;
@@ -29,6 +58,7 @@ void game_init(int local_player_id, const JoinResponse *join_info) {
         g_game.flag_steals[i] = 0;
         g_game.connected_players[i] = (join_info->players[i].ip[0] != '\0') ? 1 : 0;
         g_game.ready_players[i] = 0;
+        g_game.selected_character[i] = i % CHARACTER_COUNT;
     }
     g_game.game_started = 0;
     g_game.flag_holder = -1;
@@ -67,25 +97,9 @@ void game_init(int local_player_id, const JoinResponse *join_info) {
     printf("Player %d spawned at (%.1f, %.1f) angle %.2f\n", 
            local_player_id, g_game.local_player.x, g_game.local_player.y, g_game.local_player.angle);
     
-    /* Load player sprite textures for connected players only */
-    const char *texture_files[] = {
-        "textures/lord.ppm",
-        "textures/ohyea.ppm",
-        "textures/player_blue.ppm",
-        "textures/player_yellow.ppm",
-        "textures/player_red.ppm",
-        "textures/player_green.ppm"
-    };
-    
     for (int i = 0; i < MAX_PLAYERS; i++) {
         if (join_info->players[i].ip[0] != '\0') {
-            Texture *tex = texture_load_ppm(texture_files[i]);
-            if (tex) {
-                sprite_set_texture(i, tex, 0.8f, 1.6f);
-                snprintf(g_game.texture_files[i], sizeof(g_game.texture_files[i]), "%s", texture_files[i]);
-            } else {
-                snprintf(g_game.texture_files[i], sizeof(g_game.texture_files[i]), "%s (FAILED)", texture_files[i]);
-            }
+            game_set_player_character(i, g_game.selected_character[i]);
         }
     }
     
@@ -313,6 +327,66 @@ int game_get_local_ready(void) {
     ready = g_game.ready_players[g_game.local_player_id];
     pthread_mutex_unlock(&g_game.player_mutex);
     return ready;
+}
+
+void game_set_player_character(int player_id, int character_index) {
+    if (player_id < 0 || player_id >= MAX_PLAYERS) {
+        return;
+    }
+
+    int normalized_index = normalize_character_index(character_index);
+    int current_index;
+
+    pthread_mutex_lock(&g_game.player_mutex);
+    current_index = g_game.selected_character[player_id];
+    if (current_index == normalized_index) {
+        pthread_mutex_unlock(&g_game.player_mutex);
+        return;
+    }
+    g_game.selected_character[player_id] = normalized_index;
+    pthread_mutex_unlock(&g_game.player_mutex);
+
+    Texture *tex = texture_load_ppm(g_character_textures[normalized_index]);
+    if (tex) {
+        sprite_set_texture(player_id, tex, 0.8f, 1.6f);
+        pthread_mutex_lock(&g_game.player_mutex);
+        snprintf(g_game.texture_files[player_id], sizeof(g_game.texture_files[player_id]), "%s", g_character_textures[normalized_index]);
+        pthread_mutex_unlock(&g_game.player_mutex);
+    } else {
+        pthread_mutex_lock(&g_game.player_mutex);
+        snprintf(g_game.texture_files[player_id], sizeof(g_game.texture_files[player_id]), "%s (FAILED)", g_character_textures[normalized_index]);
+        pthread_mutex_unlock(&g_game.player_mutex);
+    }
+}
+
+int game_get_player_character(int player_id) {
+    int value = 0;
+    pthread_mutex_lock(&g_game.player_mutex);
+    if (player_id >= 0 && player_id < MAX_PLAYERS) {
+        value = g_game.selected_character[player_id];
+    }
+    pthread_mutex_unlock(&g_game.player_mutex);
+    return value;
+}
+
+int game_cycle_local_character(int direction) {
+    int next_index;
+    pthread_mutex_lock(&g_game.player_mutex);
+    next_index = g_game.selected_character[g_game.local_player_id] + direction;
+    pthread_mutex_unlock(&g_game.player_mutex);
+
+    next_index = normalize_character_index(next_index);
+    game_set_player_character(g_game.local_player_id, next_index);
+    return next_index;
+}
+
+int game_get_character_count(void) {
+    return CHARACTER_COUNT;
+}
+
+const char *game_get_character_name(int character_index) {
+    int idx = normalize_character_index(character_index);
+    return g_character_names[idx];
 }
 
 int game_is_local_region(float x, float y, int player_id) {

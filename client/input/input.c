@@ -6,6 +6,8 @@
 
 static PlayerInput g_input;
 static volatile int g_ready_toggle_requested = 0;
+static volatile int g_character_prev_requested = 0;
+static volatile int g_character_next_requested = 0;
 
 static void on_key_down(unsigned char key, int x, int y) {
     (void)x;
@@ -17,6 +19,8 @@ static void on_key_down(unsigned char key, int x, int y) {
         case 'a': case 'A': g_input.strafe_left = 1; break;
         case 'd': case 'D': g_input.strafe_right = 1; break;
         case 'r': case 'R': g_ready_toggle_requested = 1; break;
+        case 'q': case 'Q': g_character_prev_requested = 1; break;
+        case 'e': case 'E': g_character_next_requested = 1; break;
         case 27: /* ESC */ exit(0); break;
     }
 }
@@ -58,6 +62,22 @@ PlayerInput *input_get_current(void) {
 int input_consume_ready_toggle(void) {
     if (g_ready_toggle_requested) {
         g_ready_toggle_requested = 0;
+        return 1;
+    }
+    return 0;
+}
+
+int input_consume_character_prev(void) {
+    if (g_character_prev_requested) {
+        g_character_prev_requested = 0;
+        return 1;
+    }
+    return 0;
+}
+
+int input_consume_character_next(void) {
+    if (g_character_next_requested) {
+        g_character_next_requested = 0;
         return 1;
     }
     return 0;

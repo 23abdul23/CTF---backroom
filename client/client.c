@@ -61,6 +61,20 @@ static void timer_cb(int value) {
         }
     }
 
+    if (!game_has_started() && input_consume_character_prev()) {
+        int selected = game_cycle_local_character(-1);
+        if (recv_thread_send_character_selection(selected) != 0) {
+            log_error("Failed to send character selection to server");
+        }
+    }
+
+    if (!game_has_started() && input_consume_character_next()) {
+        int selected = game_cycle_local_character(1);
+        if (recv_thread_send_character_selection(selected) != 0) {
+            log_error("Failed to send character selection to server");
+        }
+    }
+
     if (game_has_started()) {
         game_update_step();
     }

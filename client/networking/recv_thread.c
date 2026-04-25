@@ -40,6 +40,25 @@ int recv_thread_send_ready_state(int is_ready) {
     return send_all(server_sock, &pkt, sizeof(pkt));
 }
 
+int recv_thread_send_character_selection(int character_index) {
+    int server_sock;
+    pthread_mutex_lock(&g_server_sock_mutex);
+    server_sock = g_server_sock;
+    pthread_mutex_unlock(&g_server_sock_mutex);
+
+    if (server_sock < 0) {
+        return -1;
+    }
+
+    LobbyPacket pkt;
+    memset(&pkt, 0, sizeof(pkt));
+    pkt.msg_type = LOBBY_MSG_CHARACTER_SELECT;
+    pkt.player_id = g_game.local_player_id;
+    pkt.character_index = character_index;
+
+    return send_all(server_sock, &pkt, sizeof(pkt));
+}
+
 static void *recv_thread_main(void *arg) {
     (void)arg;
     g_recv_running = 1;
@@ -112,6 +131,7 @@ static void *recv_thread_main(void *arg) {
                     game_set_player_connected(i, pkt.connected[i]);
                     if (pkt.connected[i]) {
                         game_set_player_ready(i, pkt.ready[i]);
+                        game_set_player_character(i, pkt.selected_character[i]);
                     }
                 }
             } else if (pkt.msg_type == LOBBY_MSG_START) {

@@ -30,13 +30,14 @@ static int all_connected_ready(const int *connected, const int *ready) {
     return 1;
 }
 
-static int broadcast_lobby_state(ClientConn *clients, int connected_players, const int *connected, const int *ready) {
+static int broadcast_lobby_state(ClientConn *clients, int connected_players, const int *connected, const int *ready, const int *selected_character) {
     LobbyPacket state;
     memset(&state, 0, sizeof(state));
     state.msg_type = LOBBY_MSG_STATE;
     for (int i = 0; i < MAX_PLAYERS; ++i) {
         state.connected[i] = connected[i] ? 1 : 0;
         state.ready[i] = ready[i] ? 1 : 0;
+        state.selected_character[i] = selected_character[i];
     }
 
     for (int i = 0; i < connected_players; ++i) {
@@ -180,11 +181,13 @@ int run_server(void) {
 
     int connected[MAX_PLAYERS] = {0};
     int ready[MAX_PLAYERS] = {0};
+    int selected_character[MAX_PLAYERS] = {0};
     for (int i = 0; i < connected_players; ++i) {
         connected[i] = 1;
+        selected_character[i] = i;
     }
 
-    if (broadcast_lobby_state(clients, connected_players, connected, ready) != 0) {
+    if (broadcast_lobby_state(clients, connected_players, connected, ready, selected_character) != 0) {
         for (int i = 0; i < connected_players; ++i) {
             close(clients[i].sock);
         }
@@ -223,13 +226,20 @@ int run_server(void) {
                 log_error("Client %d disconnected during lobby", i);
                 connected[i] = 0;
                 ready[i] = 0;
+                selected_character[i] = 0;
                 continue;
             }
 
             if (pkt.msg_type == LOBBY_MSG_READY_TOGGLE && pkt.player_id == i) {
                 ready[i] = pkt.is_ready ? 1 : 0;
                 log_info("Player %d ready=%d", i, ready[i]);
-                if (broadcast_lobby_state(clients, connected_players, connected, ready) != 0) {
+                if (broadcast_lobby_state(clients, connected_players, connected, ready, selected_character) != 0) {
+                    break;
+                }
+            } else if (pkt.msg_type == LOBBY_MSG_CHARACTER_SELECT && pkt.player_id == i) {
+                selected_character[i] = pkt.character_index;
+                log_info("Player %d selected character=%d", i, selected_character[i]);
+                if (broadcast_lobby_state(clients, connected_players, connected, ready, selected_character) != 0) {
                     break;
                 }
             }
