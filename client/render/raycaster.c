@@ -180,7 +180,7 @@ void raycaster_render(const PlayerState *player) {
         const float minimap_size = 100.0f;
         const float minimap_x = WIDTH - minimap_size - 10.0f;
         const float minimap_y = 10.0f;
-        const float scale = minimap_size / 30.0f;  /* Scale factor for map tiles */
+        const float scale = minimap_size / (float)((LEVEL_WIDTH > LEVEL_HEIGHT) ? LEVEL_WIDTH : LEVEL_HEIGHT);  /* Scale factor for map tiles */
         
         /* Draw minimap background */
         glColor3f(0.1f, 0.1f, 0.1f);
@@ -192,8 +192,8 @@ void raycaster_render(const PlayerState *player) {
         glEnd();
         
         /* Draw walls on minimap */
-        for (int x = 0; x < 30; x++) {
-            for (int y = 0; y < 30; y++) {
+        for (int x = 0; x < LEVEL_WIDTH; x++) {
+            for (int y = 0; y < LEVEL_HEIGHT; y++) {
                 int wall = level_get_wall(x, y);
                 if (wall != WALL_NONE) {
                     if (wall == WALL_BRICK) {

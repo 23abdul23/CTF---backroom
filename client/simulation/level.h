@@ -1,7 +1,7 @@
 #ifndef LEVEL_H
 #define LEVEL_H
 
-#define LEVEL_WIDTH 32
+#define LEVEL_WIDTH 40
 #define LEVEL_HEIGHT 32
 
 /* Wall types */
