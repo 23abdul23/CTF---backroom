@@ -3,57 +3,104 @@
 
 Level g_level;
 
-void level_init(void) {
-    /* Create a larger, more complex maze */
-    memset(&g_level, 0, sizeof(g_level));
-    
-    /* Outer walls */
-    for (int x = 0; x < LEVEL_WIDTH; x++) {
-        g_level.grid[0][x] = WALL_BRICK;
-        g_level.grid[LEVEL_HEIGHT-1][x] = WALL_BRICK;
+static int tile_to_wall(char tile) {
+    switch (tile) {
+        case '#': return WALL_BRICK;
+        case '=': return WALL_STONE;
+        case '+': return WALL_WOOD;
+        default: return WALL_NONE;
     }
-    for (int y = 0; y < LEVEL_HEIGHT; y++) {
-        g_level.grid[y][0] = WALL_BRICK;
-        g_level.grid[y][LEVEL_WIDTH-1] = WALL_BRICK;
-    }
-    
-    /* Main corridors - create a maze with multiple interconnected rooms */
-    
-    /* Horizontal corridors at various heights */
-    for (int y = 4; y < LEVEL_HEIGHT - 4; y += 8) {
-        for (int x = 2; x < LEVEL_WIDTH - 2; x++) {
-            g_level.grid[y][x] = WALL_STONE;
+}
+
+static void apply_tile_map(void) {
+    static const char *const map[LEVEL_HEIGHT] = {
+        "################################",
+        "#..............==..............#",
+        "#..####....####====####....####.#",
+        "#..#..#....#..#....#..#....#..#.#",
+        "#..#..#....#..#....#..#....#..#.#",
+        "#..####....#..#....#..#....####.#",
+        "#........==.#..####..#..==........#",
+        "#........==.#..#..#..#..==........#",
+        "#..####....#..#..#..#..#....####.#",
+        "#..#..#....#..#..#..#..#....#..#.#",
+        "#..#..#====#..#..#..#..#====#..#.#",
+        "#..####....#..#..#..#..#....####.#",
+        "#...........#..####..#...........#",
+        "#..+++++....#..#..#..#....+++++..#",
+        "#..+...+....#..#..#..#....+...+..#",
+        "#..+...+====#..####..#====+...+..#",
+        "#..+...+....#........#....+...+..#",
+        "#..+++++....#..####..#....+++++..#",
+        "#...........#..#..#..#...........#",
+        "#..####....#..#..#..#..#....####.#",
+        "#..#..#....#..#..#..#..#....#..#.#",
+        "#..#..#====#..#..#..#..#====#..#.#",
+        "#..####....#..#..#..#..#....####.#",
+        "#........==.#..####..#..==........#",
+        "#........==.#..#..#..#..==........#",
+        "#..####....#..#..#..#..#....####.#",
+        "#..#..#....#..#..#..#..#....#..#.#",
+        "#..#..#....#..#....#..#....#..#.#",
+        "#..####....####====####....####.#",
+        "#..............==..............#",
+        "#..............==..............#",
+        "################################"
+    };
+
+    for (int y = 0; y < LEVEL_HEIGHT; ++y) {
+        for (int x = 0; x < LEVEL_WIDTH; ++x) {
+            char tile = map[y][x];
+            if (tile == '\0') {
+                break;
+            }
+            g_level.grid[y][x] = tile_to_wall(tile);
         }
-        /* Add doorways to connect areas */
-        g_level.grid[y][10] = WALL_NONE;
-        g_level.grid[y][20] = WALL_NONE;
     }
-    
-    /* Vertical corridors at various widths */
-    for (int x = 5; x < LEVEL_WIDTH - 5; x += 10) {
-        for (int y = 2; y < LEVEL_HEIGHT - 2; y++) {
-            g_level.grid[y][x] = WALL_WOOD;
-        }
-        /* Add doorways */
-        g_level.grid[8][x] = WALL_NONE;
-        g_level.grid[16][x] = WALL_NONE;
-        g_level.grid[24][x] = WALL_NONE;
-    }
-    
-    /* Add some room-like areas with walls */
-    for (int x = 12; x < 18; x++) {
-        for (int y = 12; y < 18; y++) {
-            if (x == 12 || x == 17 || y == 12 || y == 17) {
-                g_level.grid[y][x] = WALL_BRICK;
+}
+
+static void widen_corridors(void) {
+    int snapshot[LEVEL_HEIGHT][LEVEL_WIDTH];
+    memcpy(snapshot, g_level.grid, sizeof(snapshot));
+
+    for (int y = 1; y < LEVEL_HEIGHT - 1; ++y) {
+        for (int x = 1; x < LEVEL_WIDTH - 1; ++x) {
+            if (snapshot[y][x] != WALL_NONE) {
+                continue;
+            }
+
+            if (snapshot[y][x - 1] != WALL_NONE && snapshot[y][x + 1] != WALL_NONE) {
+                g_level.grid[y][x - 1] = WALL_NONE;
+                g_level.grid[y][x + 1] = WALL_NONE;
+            }
+
+            if (snapshot[y - 1][x] != WALL_NONE && snapshot[y + 1][x] != WALL_NONE) {
+                g_level.grid[y - 1][x] = WALL_NONE;
+                g_level.grid[y + 1][x] = WALL_NONE;
             }
         }
     }
-    
-    /* Add another room structure */
-    for (int x = 22; x < 28; x++) {
-        for (int y = 6; y < 10; y++) {
-            if (x == 22 || x == 27 || y == 6 || y == 9) {
-                g_level.grid[y][x] = WALL_STONE;
+}
+
+void level_init(void) {
+    memset(&g_level, 0, sizeof(g_level));
+    apply_tile_map();
+    widen_corridors();
+
+    /* Keep spawn zones open even if the tile art changes later. */
+    const int spawns[][2] = {
+        {6, 6}, {23, 23}, {26, 6}, {6, 26}
+    };
+    for (int i = 0; i < 4; ++i) {
+        int sx = spawns[i][0];
+        int sy = spawns[i][1];
+        for (int dy = -1; dy <= 1; ++dy) {
+            for (int dx = -1; dx <= 1; ++dx) {
+                int x = sx + dx;
+                int y = sy + dy;
+                if (x > 0 && x < LEVEL_WIDTH - 1 && y > 0 && y < LEVEL_HEIGHT - 1) {
+                    g_level.grid[y][x] = WALL_NONE;
+                }
             }
         }
     }
