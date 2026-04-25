@@ -9,7 +9,7 @@
 #define MAX_SPEED 350.0f
 #define RESTITUTION 0.0f
 
-#define MAX_PLAYERS 4
+#define MAX_PLAYERS 6
 #define MAX_BALLS 4
 #define MAX_SEEN_IDS 512
 

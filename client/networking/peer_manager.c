@@ -13,7 +13,7 @@
 #include "net.h"
 
 static int g_local_player_id = -1;
-static int g_peer_sockets[MAX_PLAYERS] = {-1, -1, -1, -1};
+static int g_peer_sockets[MAX_PLAYERS];
 pthread_mutex_t g_peer_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 int get_left(int id) {

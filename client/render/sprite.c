@@ -60,13 +60,15 @@ void sprite_render_players(const PlayerState *camera) {
         PlayerSprite *sprite = &g_sprite_manager.sprites[i];
         if (!sprite->texture) {
             /* Create placeholder if no texture set */
-            static Texture *placeholders[4] = {NULL};
+            static Texture *placeholders[MAX_PLAYERS] = {NULL};
             if (!placeholders[i]) {
-                unsigned char colors[4][3] = {
+                unsigned char colors[MAX_PLAYERS][3] = {
                     {255, 0, 0},     /* Red */
                     {0, 255, 0},     /* Green */
                     {0, 0, 255},     /* Blue */
-                    {255, 255, 0}    /* Yellow */
+                    {255, 255, 0},   /* Yellow */
+                    {255, 0, 255},   /* Magenta */
+                    {0, 255, 255}    /* Cyan */
                 };
                 placeholders[i] = texture_create_placeholder(32, 64, 
                     colors[i][0], colors[i][1], colors[i][2]);

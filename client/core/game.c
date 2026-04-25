@@ -36,10 +36,12 @@ void game_init(int local_player_id, const JoinResponse *join_info) {
     
     /* Initialize all player positions at different locations */
     float spawn_positions[MAX_PLAYERS][4] = {
-        {6.5f, 6.5f, 0.0f, 0.785f},          /* Player 0: (6.5,6.5), angle 45° */
-        {23.5f, 23.5f, 3.14159f, 3.926f},    /* Player 1: (23.5,23.5), angle 225° */
-        {26.5f, 6.5f, 1.57f, 2.356f},        /* Player 2: (26.5,6.5), angle 135° */
-        {6.5f, 26.5f, 4.71f, 5.498f}         /* Player 3: (6.5,26.5), angle 315° */
+        {6.5f, 6.5f, 0.0f, 0.785f},          /* Player 0: top-left */
+        {23.5f, 23.5f, 3.14159f, 3.926f},    /* Player 1: center-south */
+        {26.5f, 6.5f, 1.57f, 2.356f},        /* Player 2: top-right */
+        {6.5f, 26.5f, 4.71f, 5.498f},        /* Player 3: bottom-left */
+        {35.5f, 6.5f, 1.57f, 2.356f},        /* Player 4: east wing north */
+        {35.5f, 26.5f, 4.71f, 5.498f}        /* Player 5: east wing south */
     };
     
     /* Only initialize connected players */
@@ -70,7 +72,9 @@ void game_init(int local_player_id, const JoinResponse *join_info) {
         "textures/lord.ppm",
         "textures/ohyea.ppm",
         "textures/player_blue.ppm",
-        "textures/player_yellow.ppm"
+        "textures/player_yellow.ppm",
+        "textures/player_red.ppm",
+        "textures/player_green.ppm"
     };
     
     for (int i = 0; i < MAX_PLAYERS; i++) {

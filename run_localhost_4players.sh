@@ -20,7 +20,15 @@ SERVER_PID=$!
 trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
 
 sleep 1
-echo "Spawning 2 players at different locations..."
+echo "Spawning 6 players at different locations..."
+"$CLIENT_BIN" 127.0.0.1 &
+sleep 0.8
+"$CLIENT_BIN" 127.0.0.1 &
+sleep 0.8
+"$CLIENT_BIN" 127.0.0.1 &
+sleep 0.8
+"$CLIENT_BIN" 127.0.0.1 &
+sleep 0.8
 "$CLIENT_BIN" 127.0.0.1 &
 sleep 0.8
 "$CLIENT_BIN" 127.0.0.1 &

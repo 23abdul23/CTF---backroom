@@ -6,7 +6,7 @@ extern "C" {
 #endif
 
 /* Constants */
-#define MAX_PLAYERS_CONST 4
+#define MAX_PLAYERS_CONST 6
 #define MAX_HOSTNAME_LEN 64
 #define NETWORK_TIMEOUT_SEC 5
 
@@ -45,7 +45,7 @@ typedef struct {
 
 typedef struct {
     int assigned_id;
-    PlayerInfo players[4];
+    PlayerInfo players[MAX_PLAYERS_CONST];
 } JoinResponse;
 
 typedef struct {

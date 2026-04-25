@@ -27,7 +27,7 @@ $serverJob = Start-Job -ScriptBlock {
 Start-Sleep -Milliseconds 1000
 
 $clientJobs = @()
-for ($i = 0; $i -lt 4; $i++) {
+for ($i = 0; $i -lt 6; $i++) {
     $clientJobs += Start-Job -ScriptBlock {
         param($exe, $cwd)
         Set-Location $cwd
