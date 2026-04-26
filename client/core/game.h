@@ -30,6 +30,9 @@ typedef struct {
     float flag_hold_time[MAX_PLAYERS];
     int flag_steals[MAX_PLAYERS];
     float flag_steal_cooldown;
+    char flag_event_text[128];
+    float flag_event_timer;
+    int flag_event_type; /* 1=captured(local), -1=lost(local), 0=neutral */
     
     pthread_mutex_t player_mutex;
     volatile int running;
@@ -62,6 +65,9 @@ int game_get_flag_holder(void);
 float game_get_flag_hold_time(int player_id);
 int game_get_flag_steals(int player_id);
 float game_get_flag_cooldown(void);
+const char *game_get_flag_event_text(void);
+float game_get_flag_event_time_left(void);
+int game_get_flag_event_type(void);
 
 int game_is_local_region(float x, float y, int player_id);
 

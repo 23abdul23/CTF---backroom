@@ -145,6 +145,36 @@ void raycaster_render(const PlayerState *player) {
         glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, *c);
     }
 
+    if (flag_holder == g_game.local_player_id) {
+        const char *owned_msg = "YOU HAVE THE FLAG";
+        glColor3f(1.0f, 0.95f, 0.25f);
+        glRasterPos2f((float)(WIDTH / 2 - 90), 74.0f);
+        for (const char *c = owned_msg; *c; ++c) {
+            glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, *c);
+        }
+    }
+
+    /* Flag capture/loss toast for local awareness */
+    {
+        float evt_t = game_get_flag_event_time_left();
+        const char *evt = game_get_flag_event_text();
+        if (evt_t > 0.0f && evt[0] != '\0') {
+            int evt_type = game_get_flag_event_type();
+            if (evt_type > 0) {
+                glColor3f(0.35f, 1.0f, 0.45f); /* Captured */
+            } else if (evt_type < 0) {
+                glColor3f(1.0f, 0.35f, 0.35f); /* Lost */
+            } else {
+                glColor3f(1.0f, 1.0f, 0.85f); /* Neutral */
+            }
+
+            glRasterPos2f((float)(WIDTH / 2 - 110), 46.0f);
+            for (const char *c = evt; *c; ++c) {
+                glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, *c);
+            }
+        }
+    }
+
     /* Ranking by time holding flag */
     int rank_ids[MAX_PLAYERS];
     float rank_times[MAX_PLAYERS];

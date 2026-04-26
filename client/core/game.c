@@ -151,6 +151,9 @@ void game_init(int local_player_id, const JoinResponse *join_info) {
     g_game.game_started = 0;
     g_game.flag_holder = -1;
     g_game.flag_steal_cooldown = 0.0f;
+    g_game.flag_event_text[0] = '\0';
+    g_game.flag_event_timer = 0.0f;
+    g_game.flag_event_type = 0;
     
     /* Initialize all player positions at different locations */
     float spawn_positions[MAX_PLAYERS][4] = {
@@ -283,6 +286,15 @@ void game_update_step(void) {
     g_game.players[g_game.local_player_id].y = g_game.local_player.y;
     g_game.players[g_game.local_player_id].angle = g_game.local_player.angle;
 
+    if (g_game.flag_event_timer > 0.0f) {
+        g_game.flag_event_timer -= DT;
+        if (g_game.flag_event_timer <= 0.0f) {
+            g_game.flag_event_timer = 0.0f;
+            g_game.flag_event_text[0] = '\0';
+            g_game.flag_event_type = 0;
+        }
+    }
+
     if (g_game.flag_steal_cooldown > 0.0f) {
         g_game.flag_steal_cooldown -= DT;
         if (g_game.flag_steal_cooldown < 0.0f) {
@@ -319,6 +331,18 @@ void game_update_step(void) {
                 g_game.flag_steals[new_holder] += 1;
                 g_game.flag_steal_cooldown = FLAG_STEAL_COOLDOWN_SEC;
                 printf("CTF: Player %d stole the flag from Player %d\n", new_holder, prev_holder);
+
+                if (new_holder == g_game.local_player_id) {
+                    snprintf(g_game.flag_event_text, sizeof(g_game.flag_event_text), "You captured the flag!");
+                    g_game.flag_event_type = 1;
+                } else if (prev_holder == g_game.local_player_id) {
+                    snprintf(g_game.flag_event_text, sizeof(g_game.flag_event_text), "You lost the flag!");
+                    g_game.flag_event_type = -1;
+                } else {
+                    snprintf(g_game.flag_event_text, sizeof(g_game.flag_event_text), "Player %d captured the flag", new_holder);
+                    g_game.flag_event_type = 0;
+                }
+                g_game.flag_event_timer = 2.2f;
             }
         }
     }
@@ -530,4 +554,28 @@ float game_get_flag_cooldown(void) {
     c = g_game.flag_steal_cooldown;
     pthread_mutex_unlock(&g_game.player_mutex);
     return c;
+}
+
+const char *game_get_flag_event_text(void) {
+    static char msg[128];
+    pthread_mutex_lock(&g_game.player_mutex);
+    snprintf(msg, sizeof(msg), "%s", g_game.flag_event_text);
+    pthread_mutex_unlock(&g_game.player_mutex);
+    return msg;
+}
+
+float game_get_flag_event_time_left(void) {
+    float t;
+    pthread_mutex_lock(&g_game.player_mutex);
+    t = g_game.flag_event_timer;
+    pthread_mutex_unlock(&g_game.player_mutex);
+    return t;
+}
+
+int game_get_flag_event_type(void) {
+    int type;
+    pthread_mutex_lock(&g_game.player_mutex);
+    type = g_game.flag_event_type;
+    pthread_mutex_unlock(&g_game.player_mutex);
+    return type;
 }
