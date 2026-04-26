@@ -136,39 +136,63 @@ int run_server(void) {
     JoinResponse join_payload;
     memset(&join_payload, 0, sizeof(join_payload));
 
-    /* Accept connections until we have minimum players */
+    /* Accept connections: at least MIN_PLAYERS_TO_START, up to MAX_PLAYERS */
     int connected_players = 0;
-    for (int i = 0; i < MAX_PLAYERS && connected_players < MIN_PLAYERS_TO_START; ++i) {
-        socklen_t len = sizeof(clients[i].addr);
-        log_info("Waiting for player %d...", connected_players + 1);
+    int min_reached = 0;
+    
+    while (connected_players < MAX_PLAYERS) {
+        fd_set set;
+        FD_ZERO(&set);
+        FD_SET(listen_sock, &set);
         
-        clients[i].sock = accept(listen_sock, (struct sockaddr *)&clients[i].addr, &len);
-        if (clients[i].sock < 0) {
+        struct timeval tv;
+        tv.tv_sec = 0;
+        tv.tv_usec = 100000; /* 100ms timeout for non-blocking check */
+        
+        int ready = select(listen_sock + 1, &set, NULL, NULL, &tv);
+        if (ready <= 0) {
+            /* Timeout or error - check if we have minimum to start */
+            if (connected_players >= MIN_PLAYERS_TO_START && !min_reached) {
+                log_info("Minimum players connected (%d). Entering lobby with accept still open...", connected_players);
+                min_reached = 1;
+                break;
+            }
+            continue;
+        }
+        
+        socklen_t len = sizeof(clients[connected_players].addr);
+        int client_sock = accept(listen_sock, (struct sockaddr *)&clients[connected_players].addr, &len);
+        if (client_sock < 0) {
             log_error("Accept failed: %s", strerror(errno));
-            close(listen_sock);
-            return 1;
+            continue;
         }
 
         char ipbuf[64] = {0};
-        inet_ntop(AF_INET, &clients[i].addr.sin_addr, ipbuf, sizeof(ipbuf));
+        inet_ntop(AF_INET, &clients[connected_players].addr.sin_addr, ipbuf, sizeof(ipbuf));
         log_info("Client connected from %s", ipbuf);
 
-        if (recv_all(clients[i].sock, &clients[i].join_req, sizeof(clients[i].join_req)) != 0) {
-            log_error("Failed receiving JoinRequest from client %d: %s", i, strerror(errno));
-            close(clients[i].sock);
-            close(listen_sock);
-            return 1;
+        if (recv_all(client_sock, &clients[connected_players].join_req, sizeof(clients[connected_players].join_req)) != 0) {
+            log_error("Failed receiving JoinRequest from client %d: %s", connected_players, strerror(errno));
+            close(client_sock);
+            continue;
         }
 
-        join_payload.players[i].player_id = i;
-        snprintf(join_payload.players[i].ip, sizeof(join_payload.players[i].ip), "%s", ipbuf);
-        join_payload.players[i].port = clients[i].join_req.listen_port;
+        clients[connected_players].sock = client_sock;
+        join_payload.players[connected_players].player_id = connected_players;
+        snprintf(join_payload.players[connected_players].ip, sizeof(join_payload.players[connected_players].ip), "%s", ipbuf);
+        join_payload.players[connected_players].port = clients[connected_players].join_req.listen_port;
 
-        log_info("Assigned Player %d (listen port: %d)", i, clients[i].join_req.listen_port);
+        log_info("Assigned Player %d (listen port: %d)", connected_players, clients[connected_players].join_req.listen_port);
         connected_players++;
+        
+        if (!min_reached && connected_players >= MIN_PLAYERS_TO_START) {
+            log_info("Minimum players connected (%d). Entering lobby with accept still open...", connected_players);
+            min_reached = 1;
+            break;
+        }
     }
 
-    log_info("Minimum players connected (%d). Entering ready lobby...", MIN_PLAYERS_TO_START);
+    log_info("Lobby starting with %d connected players", connected_players);
     
     /* Send matchmaking info to all connected players */
     for (int i = 0; i < connected_players; ++i) {
