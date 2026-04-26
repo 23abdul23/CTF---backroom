@@ -5,6 +5,8 @@
 #include <string.h>
 #include <math.h>
 #include <pthread.h>
+#include <dirent.h>
+#include <ctype.h>
 
 #include "../simulation/level.h"
 #include "../input/input.h"
@@ -15,39 +17,125 @@
 
 #define FLAG_STEAL_DISTANCE 1.2f
 #define FLAG_STEAL_COOLDOWN_SEC 0.8f
-#define CHARACTER_COUNT 6
+#define MAX_CHARACTERS 128
 
 GameState g_game;
 
-static const char *g_character_names[CHARACTER_COUNT] = {
-    "LORD",
-    "OHYEA",
-    "BLUE NINJA",
-    "YELLOW NINJA",
-    "RED NINJA",
-    "GREEN NINJA"
-};
+typedef struct {
+    char name[64];
+    char path[160];
+} CharacterEntry;
 
-static const char *g_character_textures[CHARACTER_COUNT] = {
-    "textures/lord.ppm",
-    "textures/ohyea.ppm",
-    "textures/player_blue.ppm",
-    "textures/player_yellow.ppm",
-    "textures/player_red.ppm",
-    "textures/player_green.ppm"
-};
+static CharacterEntry g_character_entries[MAX_CHARACTERS];
+static Texture *g_character_base_textures[MAX_CHARACTERS];
+static int g_character_count = 0;
+
+static void reset_character_catalog(void) {
+    for (int i = 0; i < MAX_CHARACTERS; ++i) {
+        if (g_character_base_textures[i]) {
+            texture_free(g_character_base_textures[i]);
+            g_character_base_textures[i] = NULL;
+        }
+        g_character_entries[i].name[0] = '\0';
+        g_character_entries[i].path[0] = '\0';
+    }
+    g_character_count = 0;
+}
+
+static int has_ppm_extension(const char *name) {
+    size_t len = strlen(name);
+    if (len < 4) {
+        return 0;
+    }
+    char c1 = (char)tolower((unsigned char)name[len - 4]);
+    char c2 = (char)tolower((unsigned char)name[len - 3]);
+    char c3 = (char)tolower((unsigned char)name[len - 2]);
+    char c4 = (char)tolower((unsigned char)name[len - 1]);
+    return c1 == '.' && c2 == 'p' && c3 == 'p' && c4 == 'm';
+}
+
+static void build_character_name(const char *filename, char *out, size_t out_size) {
+    size_t len = strlen(filename);
+    size_t stem_len = len;
+    for (size_t i = 0; i < len; ++i) {
+        if (filename[i] == '.') {
+            stem_len = i;
+            break;
+        }
+    }
+    if (stem_len >= out_size) {
+        stem_len = out_size - 1;
+    }
+
+    for (size_t i = 0; i < stem_len; ++i) {
+        char ch = filename[i];
+        out[i] = (char)((ch == '_') ? ' ' : toupper((unsigned char)ch));
+    }
+    out[stem_len] = '\0';
+}
+
+static int compare_characters(const void *a, const void *b) {
+    const CharacterEntry *ca = (const CharacterEntry *)a;
+    const CharacterEntry *cb = (const CharacterEntry *)b;
+    return strcmp(ca->name, cb->name);
+}
+
+static void load_character_catalog(void) {
+    reset_character_catalog();
+
+    DIR *dir = opendir("textures");
+    if (dir) {
+        struct dirent *entry;
+        while ((entry = readdir(dir)) != NULL) {
+            if (!has_ppm_extension(entry->d_name)) {
+                continue;
+            }
+            if (g_character_count >= MAX_CHARACTERS) {
+                break;
+            }
+
+            CharacterEntry *dst = &g_character_entries[g_character_count];
+            snprintf(dst->path, sizeof(dst->path), "textures/%s", entry->d_name);
+            build_character_name(entry->d_name, dst->name, sizeof(dst->name));
+            g_character_count++;
+        }
+        closedir(dir);
+    }
+
+    if (g_character_count > 1) {
+        qsort(g_character_entries, (size_t)g_character_count, sizeof(g_character_entries[0]), compare_characters);
+    }
+
+    if (g_character_count == 0) {
+        snprintf(g_character_entries[0].name, sizeof(g_character_entries[0].name), "DEFAULT");
+        snprintf(g_character_entries[0].path, sizeof(g_character_entries[0].path), "textures/lord.ppm");
+        g_character_count = 1;
+    }
+
+    for (int i = 0; i < g_character_count; ++i) {
+        g_character_base_textures[i] = texture_load_ppm(g_character_entries[i].path);
+        if (!g_character_base_textures[i]) {
+            unsigned char r = (unsigned char)((i * 67) % 255);
+            unsigned char g = (unsigned char)((i * 101) % 255);
+            unsigned char b = (unsigned char)((i * 149) % 255);
+            g_character_base_textures[i] = texture_create_placeholder(32, 64, r, g, b);
+        }
+    }
+}
 
 static int normalize_character_index(int idx) {
-    if (CHARACTER_COUNT <= 0) {
+    if (g_character_count <= 0) {
         return 0;
     }
     while (idx < 0) {
-        idx += CHARACTER_COUNT;
+        idx += g_character_count;
     }
-    return idx % CHARACTER_COUNT;
+    return idx % g_character_count;
 }
 
 void game_init(int local_player_id, const JoinResponse *join_info) {
+    load_character_catalog();
+
     g_game.local_player_id = local_player_id;
     memcpy(&g_game.join_info, join_info, sizeof(*join_info));
     
@@ -58,7 +146,7 @@ void game_init(int local_player_id, const JoinResponse *join_info) {
         g_game.flag_steals[i] = 0;
         g_game.connected_players[i] = (join_info->players[i].ip[0] != '\0') ? 1 : 0;
         g_game.ready_players[i] = 0;
-        g_game.selected_character[i] = i % CHARACTER_COUNT;
+        g_game.selected_character[i] = i % g_character_count;
     }
     g_game.game_started = 0;
     g_game.flag_holder = -1;
@@ -113,6 +201,7 @@ void game_init(int local_player_id, const JoinResponse *join_info) {
 
 void game_shutdown(void) {
     g_game.running = 0;
+    reset_character_catalog();
     pthread_mutex_destroy(&g_game.player_mutex);
 }
 
@@ -346,15 +435,16 @@ void game_set_player_character(int player_id, int character_index) {
     g_game.selected_character[player_id] = normalized_index;
     pthread_mutex_unlock(&g_game.player_mutex);
 
-    Texture *tex = texture_load_ppm(g_character_textures[normalized_index]);
+    const char *texture_path = g_character_entries[normalized_index].path;
+    Texture *tex = texture_clone(g_character_base_textures[normalized_index]);
     if (tex) {
         sprite_set_texture(player_id, tex, 0.8f, 1.6f);
         pthread_mutex_lock(&g_game.player_mutex);
-        snprintf(g_game.texture_files[player_id], sizeof(g_game.texture_files[player_id]), "%s", g_character_textures[normalized_index]);
+        snprintf(g_game.texture_files[player_id], sizeof(g_game.texture_files[player_id]), "%s", texture_path);
         pthread_mutex_unlock(&g_game.player_mutex);
     } else {
         pthread_mutex_lock(&g_game.player_mutex);
-        snprintf(g_game.texture_files[player_id], sizeof(g_game.texture_files[player_id]), "%s (FAILED)", g_character_textures[normalized_index]);
+        snprintf(g_game.texture_files[player_id], sizeof(g_game.texture_files[player_id]), "%s (FAILED)", texture_path);
         pthread_mutex_unlock(&g_game.player_mutex);
     }
 }
@@ -381,12 +471,22 @@ int game_cycle_local_character(int direction) {
 }
 
 int game_get_character_count(void) {
-    return CHARACTER_COUNT;
+    return g_character_count;
 }
 
 const char *game_get_character_name(int character_index) {
     int idx = normalize_character_index(character_index);
-    return g_character_names[idx];
+    return g_character_entries[idx].name;
+}
+
+const char *game_get_character_texture_path(int character_index) {
+    int idx = normalize_character_index(character_index);
+    return g_character_entries[idx].path;
+}
+
+const Texture *game_get_character_texture(int character_index) {
+    int idx = normalize_character_index(character_index);
+    return g_character_base_textures[idx];
 }
 
 int game_is_local_region(float x, float y, int player_id) {

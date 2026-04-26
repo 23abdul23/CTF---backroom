@@ -5,6 +5,7 @@
 
 #include "../../common/protocol.h"
 #include "../config.h"
+#include "../render/texture.h"
 
 /* Player state for FPS */
 typedef struct {
@@ -54,6 +55,8 @@ int game_get_player_character(int player_id);
 int game_cycle_local_character(int direction);
 int game_get_character_count(void);
 const char *game_get_character_name(int character_index);
+const char *game_get_character_texture_path(int character_index);
+const Texture *game_get_character_texture(int character_index);
 
 int game_get_flag_holder(void);
 float game_get_flag_hold_time(int player_id);

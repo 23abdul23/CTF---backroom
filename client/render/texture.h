@@ -13,6 +13,7 @@ Texture *texture_load_ppm(const char *filepath);
 
 /* Load a simple placeholder texture (colored square) */
 Texture *texture_create_placeholder(int width, int height, unsigned char r, unsigned char g, unsigned char b);
+Texture *texture_clone(const Texture *src);
 
 void texture_free(Texture *tex);
 

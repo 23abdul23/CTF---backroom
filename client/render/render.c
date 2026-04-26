@@ -17,7 +17,7 @@ static void draw_text(float x, float y, void *font, const char *text) {
     }
 }
 
-static void draw_texture_preview(Texture *tex, float x, float y, float w, float h) {
+static void draw_texture_preview(Texture *tex, float x, float y, float w, float h, int max_samples_x, int max_samples_y) {
     glColor3f(0.18f, 0.20f, 0.26f);
     glBegin(GL_QUADS);
     glVertex2f(x - 6.0f, y - 6.0f);
@@ -37,17 +37,44 @@ static void draw_texture_preview(Texture *tex, float x, float y, float w, float 
         return;
     }
 
-    const float px_w = w / (float)tex->width;
-    const float px_h = h / (float)tex->height;
+    int samples_x = tex->width;
+    int samples_y = tex->height;
+    if (max_samples_x > 0 && samples_x > max_samples_x) {
+        samples_x = max_samples_x;
+    }
+    if (max_samples_y > 0 && samples_y > max_samples_y) {
+        samples_y = max_samples_y;
+    }
+
+    if (samples_x <= 0) {
+        samples_x = 1;
+    }
+    if (samples_y <= 0) {
+        samples_y = 1;
+    }
+
+    const float src_step_x = (float)tex->width / (float)samples_x;
+    const float src_step_y = (float)tex->height / (float)samples_y;
+    const float px_w = w / (float)samples_x;
+    const float px_h = h / (float)samples_y;
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    for (int ty = 0; ty < tex->height; ++ty) {
-        for (int tx = 0; tx < tex->width; ++tx) {
+    glBegin(GL_QUADS);
+    for (int ty = 0; ty < samples_y; ++ty) {
+        int src_y = (int)((float)ty * src_step_y);
+        if (src_y >= tex->height) {
+            src_y = tex->height - 1;
+        }
+        for (int tx = 0; tx < samples_x; ++tx) {
+            int src_x = (int)((float)tx * src_step_x);
+            if (src_x >= tex->width) {
+                src_x = tex->width - 1;
+            }
             unsigned char r, g, b, a;
-            texture_get_pixel(tex, tx, ty, &r, &g, &b, &a);
-            if (a < 8) {
+            texture_get_pixel(tex, src_x, src_y, &r, &g, &b, &a);
+            if (a < 20) {
                 continue;
             }
 
@@ -57,56 +84,20 @@ static void draw_texture_preview(Texture *tex, float x, float y, float w, float 
             const float y2 = y1 + px_h;
 
             glColor4ub(r, g, b, a);
-            glBegin(GL_QUADS);
+            glColor4ub(r, g, b, a);
             glVertex2f(x1, y1);
             glVertex2f(x2, y1);
             glVertex2f(x2, y2);
             glVertex2f(x1, y2);
-            glEnd();
         }
     }
+    glEnd();
 
     glDisable(GL_BLEND);
 }
 
 static Texture *get_character_grid_texture(int character_index) {
-    static const char *character_paths[] = {
-        "textures/lord.ppm",
-        "textures/ohyea.ppm",
-        "textures/player_blue.ppm",
-        "textures/player_yellow.ppm",
-        "textures/player_red.ppm",
-        "textures/player_green.ppm"
-    };
-    static Texture *cached[6] = {NULL};
-    static int attempted[6] = {0};
-
-    if (character_index < 0 || character_index >= 6) {
-        return NULL;
-    }
-
-    if (!attempted[character_index]) {
-        attempted[character_index] = 1;
-        cached[character_index] = texture_load_ppm(character_paths[character_index]);
-        if (!cached[character_index]) {
-            unsigned char fallback_colors[6][3] = {
-                {255, 0, 0},
-                {0, 255, 0},
-                {0, 0, 255},
-                {255, 255, 0},
-                {255, 0, 255},
-                {0, 255, 255}
-            };
-            cached[character_index] = texture_create_placeholder(
-                32, 64,
-                fallback_colors[character_index][0],
-                fallback_colors[character_index][1],
-                fallback_colors[character_index][2]
-            );
-        }
-    }
-
-    return cached[character_index];
+    return (Texture *)game_get_character_texture(character_index);
 }
 
 static void draw_character_grid(float y) {
@@ -133,7 +124,7 @@ static void draw_character_grid(float y) {
     for (int i = 0; i < count; ++i) {
         float x = start_x + i * (cell_w + gap);
         Texture *tex = get_character_grid_texture(i);
-        draw_texture_preview(tex, x, y, cell_w, cell_h);
+        draw_texture_preview(tex, x, y, cell_w, cell_h, 24, 32);
 
         if (i == selected) {
             glLineWidth(3.0f);
@@ -170,7 +161,7 @@ static void render_lobby_screen(void) {
 
     PlayerSprite *local_sprite = sprite_get(g_game.local_player_id);
     draw_text(40.0f, 130.0f, GLUT_BITMAP_HELVETICA_12, "Your texture preview:");
-    draw_texture_preview(local_sprite ? local_sprite->texture : NULL, 40.0f, 145.0f, 120.0f, 180.0f);
+    draw_texture_preview(local_sprite ? local_sprite->texture : NULL, 40.0f, 145.0f, 120.0f, 180.0f, 56, 84);
 
     {
         char texture_label[196];

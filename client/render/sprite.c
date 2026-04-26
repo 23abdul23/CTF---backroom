@@ -140,32 +140,60 @@ void sprite_render_players(const PlayerState *camera) {
             continue;
         }
         
-        /* Render sprite as textured pixels (no rotation) */
-        float px_width = sprite_screen_width / tex->width;
-        float px_height = sprite_screen_height / tex->height;
+        /* Render sprite with adaptive sampling and batched quads */
+        int sample_x = tex->width;
+        int sample_y = tex->height;
 
-        for (int ty = 0; ty < tex->height; ty++) {
-            for (int tx = 0; tx < tex->width; tx++) {
+        /* Keep cost bounded: fewer samples when sprite is small or texture is huge */
+        if (sample_x > (int)sprite_screen_width) {
+            sample_x = (int)sprite_screen_width;
+        }
+        if (sample_y > (int)sprite_screen_height) {
+            sample_y = (int)sprite_screen_height;
+        }
+
+        if (sample_x > 48) {
+            sample_x = 48;
+        }
+        if (sample_y > 72) {
+            sample_y = 72;
+        }
+
+        if (sample_x < 1) sample_x = 1;
+        if (sample_y < 1) sample_y = 1;
+
+        float src_step_x = (float)tex->width / (float)sample_x;
+        float src_step_y = (float)tex->height / (float)sample_y;
+        float px_width = sprite_screen_width / (float)sample_x;
+        float px_height = sprite_screen_height / (float)sample_y;
+
+        glBegin(GL_QUADS);
+        for (int sy = 0; sy < sample_y; sy++) {
+            int ty = (int)(sy * src_step_y);
+            if (ty >= tex->height) ty = tex->height - 1;
+
+            for (int sx = 0; sx < sample_x; sx++) {
+                int tx = (int)(sx * src_step_x);
+                if (tx >= tex->width) tx = tex->width - 1;
+
                 unsigned char r, g, b, a;
                 texture_get_pixel(tex, tx, ty, &r, &g, &b, &a);
-                
-                if (a > 200) { /* Only draw visible pixels */
-                    glColor4ub(r, g, b, a);
 
-                    float x1 = screen_x + tx * px_width;
-                    float y1 = screen_y + ty * px_height;
+                if (a > 200) {
+                    float x1 = screen_x + sx * px_width;
+                    float y1 = screen_y + sy * px_height;
                     float x2 = x1 + px_width;
                     float y2 = y1 + px_height;
-                    
-                    glBegin(GL_QUADS);
+
+                    glColor4ub(r, g, b, a);
                     glVertex2f(x1, y1);
                     glVertex2f(x2, y1);
                     glVertex2f(x2, y2);
                     glVertex2f(x1, y2);
-                    glEnd();
                 }
             }
         }
+        glEnd();
 
         /* Highlight flag holder with a yellow border */
         if (i == game_get_flag_holder()) {

@@ -97,6 +97,31 @@ Texture *texture_create_placeholder(int width, int height, unsigned char r, unsi
     return tex;
 }
 
+Texture *texture_clone(const Texture *src) {
+    if (!src || !src->pixels || src->width <= 0 || src->height <= 0) {
+        return NULL;
+    }
+
+    Texture *clone = malloc(sizeof(Texture));
+    if (!clone) {
+        return NULL;
+    }
+
+    clone->width = src->width;
+    clone->height = src->height;
+    clone->id = 0;
+
+    size_t bytes = (size_t)src->width * (size_t)src->height * 4u;
+    clone->pixels = malloc(bytes);
+    if (!clone->pixels) {
+        free(clone);
+        return NULL;
+    }
+
+    memcpy(clone->pixels, src->pixels, bytes);
+    return clone;
+}
+
 void texture_free(Texture *tex) {
     if (!tex) return;
     if (tex->pixels) free(tex->pixels);

@@ -3,7 +3,7 @@
 
 #define SERVER_PORT 5000
 #define MAX_PLAYERS 6
-#define MIN_PLAYERS_TO_START 6  /* Start game with 6 players */
+#define MIN_PLAYERS_TO_START 2  /* Start game once at least 2 players are connected */
 
 int run_server(void);
 
