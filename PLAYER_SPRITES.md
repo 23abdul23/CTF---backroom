@@ -1,155 +1,181 @@
-# Custom Player Sprites Guide
+# Player Sprites and Character Selection Guide (Current)
 
-## Overview
+This guide describes how player sprites work in CGV **right now**, including:
+- supported texture format,
+- folder-driven character discovery,
+- lobby character selection,
+- runtime sprite rendering and occlusion.
 
-Your CGV FPS now supports custom player sprites! Instead of boring boxes, each player is rendered as a billboarded flat image that always faces the camera.
+---
 
-## Using the Built-in Textures
+## 1) System overview
 
-The game comes with 4 pre-generated colored player textures:
-- `textures/player_red.ppm` - Player 0 (Red)
-- `textures/player_green.ppm` - Player 1 (Green)
-- `textures/player_blue.ppm` - Player 2 (Blue)
-- `textures/player_yellow.ppm` - Player 3 (Yellow)
+In-game players are rendered as **billboard sprites**:
+- flat textured quads,
+- always facing the camera,
+- scaled by distance,
+- clipped by wall depth so hidden portions are not drawn.
 
-Just run the game and you'll see other players as colored flat images!
+Character selection is done in the lobby and synchronized across clients.
 
-## Creating Your Own Player Sprites
+---
 
-### Format
-Player sprites must be in **PPM format (P6 - binary RGB)**:
-```
+## 2) Current behavior (important changes)
+
+### Not hardcoded to 4 textures anymore
+Older behavior used a fixed small texture list. Current behavior is folder-driven:
+- scan `textures/` at startup,
+- collect all `.ppm` files,
+- sort into a catalog,
+- expose as selectable characters.
+
+### Supports up to 6 players
+The multiplayer limit is now 6. Any connected player can choose any discovered character index.
+
+### Lobby controls for selection
+- `Q`: previous character
+- `E`: next character
+- `R`: ready toggle
+
+---
+
+## 3) Texture format requirements
+
+### Required format
+- **PPM P6** (binary RGB) files.
+
+Header layout:
+```text
 P6
 WIDTH HEIGHT
 255
-[RGB pixel data...]
+[binary RGB bytes...]
 ```
 
-### Easy Method: Use ImageMagick
+### Transparency behavior
+- The internal texture system uses RGBA buffers for rendering.
+- For PPM input, practical transparency comes from conversion/placeholder behavior in engine paths.
+- If you require detailed alpha masks, extending loader support (PNG, etc.) is recommended.
 
-Convert any image to PPM:
+---
+
+## 4) How to add new playable characters
+
+1. Create or convert sprite image to `.ppm`.
+2. Put it inside `textures/`.
+3. Restart game clients (catalog is loaded at init).
+4. Use `Q`/`E` in lobby to select it.
+
+No source code edits are required for normal additions.
+
+---
+
+## 5) Quick conversion examples
+
+### ImageMagick: PNG/JPG to PPM
 ```bash
-convert your_image.png -depth 8 custom_player.ppm
+convert input.png -depth 8 textures/my_character.ppm
 ```
 
-Or generate from scratch:
+### ImageMagick: generate simple placeholder
 ```bash
-convert -size 64x128 xc:red player_sprite.ppm
+convert -size 64x128 xc:purple textures/demo_fighter.ppm
 ```
 
-### Manual PPM Creation
-
-Create a PPM file with your favorite tool:
-
-**Python example:**
+### Python (Pillow)
 ```python
 from PIL import Image
 
-# Create or load image
-img = Image.open('player_face.png')
-img = img.convert('RGB')
-img = img.resize((64, 128))
-
-# Save as PPM
-img.save('player_sprite.ppm')
+img = Image.open("my_source.png").convert("RGB").resize((64, 128))
+img.save("textures/my_character.ppm")
 ```
 
-**Bash example:**
-```bash
-# Create 64x128 red image
-{
-    echo "P6"
-    echo "64 128"
-    echo "255"
-    for i in {1..8192}; do
-        printf '\xff\x00\x00'  # RGB for red
-    done
-} > player_red.ppm
-```
+---
 
-### Using Your Custom Sprites
+## 6) Recommended art specs
 
-1. Create your PPM file and place it in `textures/` directory
-2. Edit [client/core/game.c](client/core/game.c) around line 28:
-   ```c
-   const char *texture_files[] = {
-       "textures/your_player_0.ppm",
-       "textures/your_player_1.ppm",
-       "textures/your_player_2.ppm",
-       "textures/your_player_3.ppm"
-   };
-   ```
-3. Rebuild: `make`
-4. Run: `make run-localhost`
+For best visibility in current renderer:
+- size around **64x128** (portrait),
+- high-contrast silhouette,
+- avoid very dark colors close to wall palette,
+- keep a readable central figure shape (small distant sprites stay legible).
 
-## Technical Details
+Larger images can work, but increase memory and upload cost.
 
-### How It Works
+---
 
-1. **Texture Loading** - [client/render/texture.c](client/render/texture.c)
-   - Loads PPM files into memory
-   - Converts RGB to RGBA format
-   - Stores pixel data
+## 7) Engine internals
 
-2. **Sprite System** - [client/render/sprite.c](client/render/sprite.c)
-   - Manages 4 player sprites
-   - Detects when other players are in your FOV
-   - Calculates screen position and size based on distance
-   - Renders pixel-by-pixel with perspective correction
+### 7.1 Catalog loading
+At startup, the client:
+1. scans `textures/`,
+2. filters `.ppm` files,
+3. builds display names from filenames,
+4. preloads base textures,
+5. uses placeholder textures when file load fails.
 
-3. **Billboard Rendering** - [client/render/raycaster.c](client/render/raycaster.c)
-   - Sprites always face the camera
-   - Distance-based FOV checks
-   - Alpha blending for transparency
-   - Proper depth sorting with walls
+### 7.2 Per-player assignment
+- Each player has a selected character index.
+- On selection change, a texture clone is assigned to that player sprite.
+- Path info is retained for lobby display.
 
-### Image Recommendations
+### 7.3 Lobby sync
+- Client sends selection updates to server.
+- Server rebroadcasts lobby state including `selected_character[]`.
+- All clients apply remote selection updates.
 
-For best results:
-- **Size**: 64x128 pixels (portrait orientation)
-- **Format**: PPM P6 (binary RGB)
-- **Transparency**: Use low alpha values for see-through areas
-- **Style**: High contrast, visible from distance
-- **Color**: Avoid similar colors to walls (brick, stone are brown/gray)
+---
 
-## Examples
+## 8) Rendering path details
 
-### Create a Simple Sprite with ImageMagick
+Sprite draw stage:
+1. gather remote player world position,
+2. compute distance and angle to camera,
+3. reject outside FOV,
+4. compute on-screen quad,
+5. clip columns behind walls using ray depth buffer,
+6. draw textured strips with blending.
 
-**Solid color with number:**
-```bash
-convert -size 64x128 xc:blue \
-  -fill white -pointsize 48 -gravity center -annotate +0+0 '1' \
-  player_1.ppm
-```
+This per-column clipping is what prevents “player visible through wall edges” artifacts.
 
-**Gradient:**
-```bash
-convert -size 64x128 gradient:blue-cyan player_gradient.ppm
-```
+---
 
-**Pattern:**
-```bash
-convert -size 64x128 \
-  \( -size 64x64 xc:red \) \
-  \( -size 64x64 xc:blue \) \
-  -append \
-  player_bicolor.ppm
-```
+## 9) Troubleshooting
 
-## Debugging
+### Character does not appear in lobby list
+- Ensure extension is `.ppm`.
+- Confirm file is readable and valid P6 format.
+- Restart clients after adding files.
 
-If sprites aren't showing:
+### Texture appears corrupted
+- Re-export with 8-bit RGB.
+- Verify header is exactly `P6`, valid dimensions, max value `255`.
 
-1. Check textures load: Look for messages like `Loaded texture: textures/player_red.ppm (64x128)`
-2. Verify PPM format: `file textures/player_red.ppm` should show it's PPM P6
-3. Test visibility: Move around - sprites only render when other players are in your FOV
+### Selection updates not visible on other clients
+- Confirm server is running and clients remained connected in lobby.
+- Check if all clients are using the updated build.
 
-## Future Enhancements
+### In-game sprite still not visible
+- Ensure target player is connected and in FOV.
+- Move to reduce wall occlusion (clipping now hides blocked parts by design).
 
-Could add:
-- PNG/JPEG support via external library
-- Sprite atlas for animations
-- Rotation/animation based on player direction
-- Per-client custom texture selection
-- Network streaming of custom textures
+---
+
+## 10) Practical workflow for teams
+
+1. Artists drop new `.ppm` files into `textures/`.
+2. Developers restart local clients.
+3. Test selection cycling in lobby (`Q`/`E`).
+4. Validate visibility in-game with at least 2 players.
+
+This keeps iteration simple without code churn.
+
+---
+
+## 11) Future extension ideas
+
+- PNG/JPEG loader support.
+- Animated sprite sheets.
+- Team-based or role-based character filtering.
+- Runtime hot-reload of texture catalog.
+- Per-character metadata (hitbox scale, display name, rarity/theme tags).

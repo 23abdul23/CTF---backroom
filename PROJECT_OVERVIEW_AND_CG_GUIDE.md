@@ -1,146 +1,225 @@
-# CGV Project Overview and Computer Graphics Implementation Guide
+# CGV Project Overview and Computer Graphics Guide (Current State)
 
-## 1) What this project does
-
-This project is a C-based, networked, real-time raycasting game prototype.
-
-Core behavior:
-- A matchmaking server accepts players and shares connection info.
-- Clients connect, then form a peer mesh for gameplay data exchange.
-- Each client renders a first-person 3D-like scene using 2D raycasting.
-- Players move in a grid-based map (maze) with wall collision.
-- Other players are rendered as billboard sprites.
-- Position/angle updates are synchronized over sockets in real time.
-
-Primary modules:
-- `server/`: matchmaking and session start logic.
-- `client/core/`: game state and per-frame update.
-- `client/networking/`: connection setup, peer sockets, receive thread.
-- `client/render/`: raycaster, sprites, textures, main rendering pipeline.
-- `client/simulation/level.*`: map data and wall queries.
-- `common/protocol.h`: packet structures and shared constants.
-
-Build/runtime:
-- Built with GCC and a Makefile.
-- Uses OpenGL/GLUT for display and draw calls.
-- Uses pthreads for async receiving/network handling.
+This document explains how CGV is implemented *today* and how its core computer graphics and networking systems work.
 
 ---
 
-## 2) How the rendering works in this project
+## 1) Project summary
 
-### 2.1 Raycasting pipeline
-1. For each vertical screen column, cast one ray from player position at a specific angle.
-2. Step through the world grid until a wall cell is hit.
-3. Compute wall distance and projected wall-slice height.
-4. Draw a vertical wall slice (with distance-based brightness).
-5. Draw sky/floor for non-hit regions.
-6. Draw sprites (other players) with blending and occlusion checks.
+CGV is a C11 multiplayer raycasting FPS prototype built on OpenGL/GLUT.
 
-This is a classic “2.5D” approach: the world is stored as a 2D map, but rendered to appear 3D.
+It includes:
+- server-based matchmaking and lobby synchronization,
+- peer-to-peer gameplay updates,
+- first-person wall raycasting,
+- billboarded player sprites,
+- runtime character selection from `textures/*.ppm`,
+- and simple capture-the-flag (CTF) mechanics.
 
-### 2.2 Sprite rendering
-- Each remote player is a billboard sprite (flat image facing camera space).
-- Sprite visibility is filtered by distance and field-of-view.
-- A ray-to-sprite occlusion check prevents rendering through walls.
-- Sprite texture pixels are sampled and alpha-tested for transparency.
-
-### 2.3 Map representation
-- The level is a grid (`LEVEL_WIDTH x LEVEL_HEIGHT`).
-- Each cell stores wall type (`none`, `brick`, `stone`, `wood`, etc.).
-- Collision and ray intersections use grid lookups.
+Current multiplayer scale:
+- max players: **6**,
+- minimum players required to enter a match: **2**,
+- actual start condition: **all connected players ready**.
 
 ---
 
-## 3) Networking architecture in this project
+## 2) High-level runtime flow
 
-### 3.1 Matchmaking phase
-- Server listens on a TCP port.
-- Clients send join info (including local listen port).
-- Server assigns player IDs and broadcasts a `JoinResponse` with peer endpoints.
-
-### 3.2 Gameplay phase
-- Clients connect to each other (peer mesh).
-- A receive thread listens for remote `PlayerUpdate` packets.
-- Main thread updates local movement and periodically sends local position/angle.
-- Shared state is protected with mutexes where required.
-
----
-
-## 4) How computer graphics projects are generally implemented
-
-A practical implementation path for graphics projects:
-
-1. Define goals
-- Visual style (2D, 2.5D, 3D)
-- Performance target (FPS, resolution)
-- Platform/runtime constraints
-
-2. Choose render architecture
-- Software rasterization, fixed pipeline, or shader pipeline
-- Camera model and projection strategy
-- Data model for world geometry
-
-3. Build core loop
-- Input -> simulation update -> render -> present
-- Stable timestep or fixed delta update
-
-4. Build scene data structures
-- Spatial layout (grid, BSP, mesh, ECS)
-- Asset formats (textures, sprites, models)
-- Material/lighting data
-
-5. Implement visibility and draw ordering
-- Frustum/FOV culling
-- Depth sorting or depth buffer
-- Occlusion handling
-
-6. Add interaction and physics/collision
-- Movement model
-- Collision volumes and response
-- Game rules
-
-7. Add networking (if multiplayer)
-- Authority model (server-authoritative, peer, hybrid)
-- Packet protocol and serialization
-- State replication/interpolation/reconciliation
-
-8. Optimize and profile
-- CPU hotspots
-- Draw call count
-- Memory allocations
-- Network packet frequency/size
-
-9. Tooling and debugging
-- Logging
-- Render debug overlays (minimap, bounding visuals, ray debug)
-- Deterministic repro cases
-
-10. Polish
-- Better textures/art direction
-- UI/HUD refinement
-- Audio and feedback
-- Stability and edge-case handling
+1. **Server starts** and waits for client joins.
+2. Each client:
+	 - creates local listen socket,
+	 - joins server with its listen port,
+	 - receives assigned ID + peer endpoints.
+3. Clients establish **peer mesh sockets**.
+4. Lobby runs in server-mediated mode:
+	 - ready toggles,
+	 - character selection sync,
+	 - start broadcast.
+5. After start:
+	 - client main thread runs input/simulation/render loop,
+	 - receive thread processes peer updates.
 
 ---
 
-## 5) Typical deliverables for CG projects
+## 3) Core modules and responsibilities
 
-- Rendering engine/module
-- Scene/map/asset pipeline
-- Input and simulation systems
-- Performance metrics and profiling notes
-- Build scripts and run instructions
-- Technical documentation (architecture + tradeoffs)
+### `server/`
+- Accepts join requests.
+- Assigns player IDs.
+- Sends `JoinResponse`.
+- Maintains lobby state (`connected[]`, `ready[]`, `selected_character[]`).
+- Broadcasts lobby updates and start signal.
+
+### `client/core/`
+- Owns global game state (`g_game`).
+- Handles movement, collision checks, and CTF logic.
+- Maintains per-player character selection and sprite texture assignment.
+- Scans character catalog from `textures/` at startup.
+
+### `client/networking/`
+- `net.c`: socket helpers and connection setup.
+- `peer_manager.c`: peer socket ownership.
+- `recv_thread.c`: async receive loop for lobby + in-game updates.
+
+### `client/render/`
+- `raycaster.c`: wall casting + depth per screen column.
+- `sprite.c`: remote player billboard rendering with wall-occlusion clipping.
+- `texture.c`: PPM loading, texture clone, GL texture bind/upload.
+- `render.c`: lobby UI and main render dispatch.
+
+### `client/simulation/`
+- `level.c`: ASCII-authored map parser to wall grid.
+- `level.h`: dimensions and wall-type constants.
+
+### `common/`
+- Shared protocol structures/constants used by client and server.
 
 ---
 
-## 6) Suggested next improvements for this project
+## 4) Graphics pipeline details
 
-- Texture-mapped walls (sample wall textures by hit coordinate)
-- Better sprite depth handling per screen column
-- Minimap polish and configurable HUD
-- Network smoothing/interpolation for remote players
-- Map loader from external files (instead of hardcoded grid)
-- Robust disconnect/reconnect handling
-- Optional migration to modern OpenGL shader pipeline
+CGV uses a classic 2.5D approach.
+
+### 4.1 Camera + projection
+- Player has `(x, y, angle, fov)`.
+- One vertical ray is cast per output column.
+- Ray hit distance controls projected wall slice height:
+	$$h_{screen} \propto \frac{1}{d_{wall}}$$
+
+### 4.2 Wall rendering
+- Ray traversal samples the map grid until a solid wall tile is hit.
+- Each column stores wall depth in an internal depth array.
+- Distance-based shading is applied to wall slices.
+
+### 4.3 Sprite rendering
+- Each remote player is a vertical quad billboard in camera space.
+- Sprite screen rectangle is computed from angle and distance.
+- Texture is sampled through OpenGL texturing.
+- Per-column wall depth test clips sprite columns behind walls.
+
+This prevents classic “see-through wall” artifacts when peeking around corners.
+
+### 4.4 UI rendering
+- Before match start: full-screen lobby overlay with text + texture previews.
+- During match: first-person rendering + HUD/minimap overlays.
+
+---
+
+## 5) Map system (ASCII-driven)
+
+Map dimensions are fixed at:
+- `LEVEL_WIDTH = 40`
+- `LEVEL_HEIGHT = 32`
+
+The map is defined as an array of 32 strings with 40 chars each.
+
+Tile legend:
+- `#` → `WALL_BRICK`
+- `=` → `WALL_STONE`
+- `+` → `WALL_WOOD`
+- others (typically `.`) → `WALL_NONE`
+
+Benefits of this approach:
+- fast manual iteration,
+- clear visual authoring,
+- no external parser dependency.
+
+Spawn safety logic opens tiles near known spawn points so players do not spawn blocked.
+
+---
+
+## 6) Character selection and asset pipeline
+
+### 6.1 Discovery
+- On startup, client scans `textures/` for `.ppm` files.
+- Entries are sorted and converted into display names.
+
+### 6.2 Loading
+- Catalog base textures are preloaded to avoid repeated disk I/O during selection.
+
+### 6.3 Selection
+- Lobby input:
+	- `Q`: previous
+	- `E`: next
+	- `R`: ready toggle
+- Selection is sent to server and rebroadcast to all clients.
+
+### 6.4 Application
+- Chosen base texture is cloned for per-player sprite ownership.
+- If load fails, placeholder colored texture is used.
+
+---
+
+## 7) Networking model and protocol
+
+### 7.1 Protocol constants
+- `MAX_PLAYERS_CONST = 6`
+- Lobby messages include:
+	- ready toggle,
+	- lobby state,
+	- start signal,
+	- character selection.
+
+### 7.2 Phase split
+- **Lobby phase**: authoritative server state distribution.
+- **Gameplay phase**: direct peer updates for position/angle.
+
+### 7.3 Concurrency
+- Main thread:
+	- input,
+	- simulation,
+	- rendering,
+	- outbound player updates.
+- Receive thread:
+	- inbound lobby packets (pre-start),
+	- inbound peer updates (post-start).
+
+Mutexes protect shared game state sections that are touched from multiple threads.
+
+---
+
+## 8) CTF gameplay logic
+
+Tracked values per player:
+- total flag hold time,
+- number of successful steals.
+
+Steal rules:
+- if a non-holder comes within threshold distance of current holder,
+- and steal cooldown has expired,
+- flag ownership transfers.
+
+This gives a compact competitive objective without additional map objectives.
+
+---
+
+## 9) Build and run model
+
+Build outputs:
+- `build/server_app`
+- `build/client_app`
+
+Common workflows:
+- `make` for release build,
+- `make debug` for instrumentation and debugging.
+
+Local launch scripts are available for quick 2-player and 6-player sessions.
+
+---
+
+## 10) Known technical constraints
+
+- PPM-only texture loading in current implementation.
+- Peer mesh approach may become difficult to scale beyond small lobbies.
+- Uses legacy OpenGL immediate mode for parts of rendering/UI.
+- No client prediction/interpolation for smooth remote motion yet.
+
+---
+
+## 11) Recommended next technical steps
+
+1. External map file loader (keep ASCII format, move out of source).
+2. Add remote player interpolation/extrapolation.
+3. Migrate additional render paths to buffered modern OpenGL.
+4. Add disconnect/reconnect handling for mid-session dropouts.
+5. Improve UX consistency by renaming legacy scripts/targets.
