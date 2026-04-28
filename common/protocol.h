@@ -17,27 +17,6 @@ extern "C" {
 #define NET_ERR_DISCONNECT -4
 
 typedef struct {
-    int ball_id;
-    int owner_id;
-    float x, y;
-    float vx, vy;
-    float ax, ay;
-} Ball;
-
-typedef struct {
-    int player_id;
-    float mouse_x;
-    float mouse_y;
-} InputState;
-
-typedef struct {
-    int ball_id;
-    float x, y;
-    float vx, vy;
-    float ax, ay;
-} BallTransferPacket;
-
-typedef struct {
     int player_id;
     char ip[64];
     int port;
