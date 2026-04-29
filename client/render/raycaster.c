@@ -154,7 +154,6 @@ void raycaster_render(const PlayerState *player) {
         for (const char *c = owned_msg; *c; ++c) {
             glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, *c);
         }
-    }
 
     /* Flag capture/loss toast for local awareness */
     {
